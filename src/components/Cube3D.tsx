@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as THREE from 'three';
-import { RotateCcw, Eye, ShieldAlert } from 'lucide-react';
+import { RotateCcw, Box } from 'lucide-react';
 import { FACE_COLORS, type FaceName } from '../cube/cubeState';
 
 interface Cube3DProps {
   facelets?: string; // 54 char Kociemba notation string
   size?: number | string;
   showControls?: boolean;
+  highlightMove?: string; // e.g. "R", "U'", "F2" to highlight active turning layer
   className?: string;
 }
 
@@ -25,11 +26,11 @@ const BLACK_INNER_COLOR = 0x181F2C;
 export const Cube3D: React.FC<Cube3DProps> = ({
   facelets = 'UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB',
   showControls = true,
+  highlightMove,
   className = ''
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
-  const [webGlSupported, setWebGlSupported] = useState(true);
-  const [is2DMode, setIs2DMode] = useState(false);
+  const [useCss3D, setUseCss3D] = useState<boolean>(false);
 
   // References for Three.js instances
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -55,25 +56,33 @@ export const Cube3D: React.FC<Cube3DProps> = ({
 
   useEffect(() => {
     const container = mountRef.current;
-    if (!container) return;
+    if (!container || useCss3D) return;
 
-    // Check WebGL support
+    // Check WebGL support safely
     try {
-      const canvas = document.createElement('canvas');
-      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      const testCanvas = document.createElement('canvas');
+      const gl = testCanvas.getContext('webgl2') ||
+                 testCanvas.getContext('webgl') ||
+                 testCanvas.getContext('experimental-webgl');
       if (!gl) {
-        setWebGlSupported(false);
-        setIs2DMode(true);
+        setUseCss3D(true);
         return;
       }
     } catch {
-      setWebGlSupported(false);
-      setIs2DMode(true);
+      setUseCss3D(true);
       return;
     }
 
-    const width = container.clientWidth || 300;
-    const height = container.clientHeight || 300;
+    const width = container.clientWidth || 280;
+    const height = container.clientHeight || 280;
+
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'default' });
+    } catch {
+      setUseCss3D(true);
+      return;
+    }
 
     // Scene
     const scene = new THREE.Scene();
@@ -84,23 +93,22 @@ export const Cube3D: React.FC<Cube3DProps> = ({
     camera.position.set(0, 0, 7.5);
     cameraRef.current = camera;
 
-    // Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    // Renderer setup
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     rendererRef.current = renderer;
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
 
     // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.4);
     scene.add(ambientLight);
 
-    const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.8);
+    const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.6);
     dirLight1.position.set(5, 10, 7);
     scene.add(dirLight1);
 
-    const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.8);
+    const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.9);
     dirLight2.position.set(-5, -10, -7);
     scene.add(dirLight2);
 
@@ -111,14 +119,7 @@ export const Cube3D: React.FC<Cube3DProps> = ({
     cubeGroupRef.current = cubeGroup;
     scene.add(cubeGroup);
 
-    // Create 27 cubies
-    // Three.js BoxGeometry face material indices:
-    // 0: +X (Right)
-    // 1: -X (Left)
-    // 2: +Y (Top / Up)
-    // 3: -Y (Bottom / Down)
-    // 4: +Z (Front)
-    // 5: -Z (Back)
+    // Create 27 cubies with bevel and materials
     const cubieGeo = new THREE.BoxGeometry(0.94, 0.94, 0.94);
     const cubies: THREE.Mesh[] = [];
     const materialsList: THREE.MeshStandardMaterial[][] = [];
@@ -183,20 +184,17 @@ export const Cube3D: React.FC<Cube3DProps> = ({
         container.removeChild(renderer.domElement);
       }
     };
-  }, []);
+  }, [useCss3D]);
 
   // Update sticker colors whenever facelets change
   useEffect(() => {
-    if (!facelets || facelets.length !== 54 || cubiesRef.current.length === 0) return;
+    if (useCss3D || !facelets || facelets.length !== 54 || cubiesRef.current.length === 0) return;
 
-    // Facelet string format:
-    // U: 0-8, R: 9-17, F: 18-26, D: 27-35, L: 36-44, B: 45-53
     const getFaceColor = (faceNameChar: string) => {
       const faceName = (faceNameChar as FaceName) || 'U';
       return THREE_FACE_COLORS[faceName] ?? 0xFFFFFF;
     };
 
-    // Helper to find cubie mesh by its (x, y, z) coordinate
     const findCubie = (x: number, y: number, z: number) => {
       const idx = cubiesRef.current.findIndex(
         c => c.userData.x === x && c.userData.y === y && c.userData.z === z
@@ -207,17 +205,14 @@ export const Cube3D: React.FC<Cube3DProps> = ({
       return null;
     };
 
-    // 1. Reset all outer faces to black first
+    // Reset outer faces
     for (const mats of cubieMaterialsRef.current) {
       for (const m of mats) {
         m.color.setHex(BLACK_INNER_COLOR);
       }
     }
 
-    // 2. Up Face (+Y, index 2)
-    // U0: (-1, 1, -1), U1: (0, 1, -1), U2: (1, 1, -1)
-    // U3: (-1, 1, 0),  U4: (0, 1, 0),  U5: (1, 1, 0)
-    // U6: (-1, 1, 1),  U7: (0, 1, 1),  U8: (1, 1, 1)
+    // U Face (+Y)
     const uCoords = [
       [-1, 1, -1], [0, 1, -1], [1, 1, -1],
       [-1, 1,  0], [0, 1,  0], [1, 1,  0],
@@ -226,15 +221,10 @@ export const Cube3D: React.FC<Cube3DProps> = ({
     for (let i = 0; i < 9; i++) {
       const [x, y, z] = uCoords[i];
       const cubie = findCubie(x, y, z);
-      if (cubie) {
-        cubie.mats[2].color.setHex(getFaceColor(facelets[i]));
-      }
+      if (cubie) cubie.mats[2].color.setHex(getFaceColor(facelets[i]));
     }
 
-    // 3. Right Face (+X, index 0)
-    // R0: (1, 1, 1), R1: (1, 1, 0), R2: (1, 1, -1)
-    // R3: (1, 0, 1), R4: (1, 0, 0), R5: (1, 0, -1)
-    // R6: (1, -1, 1), R7: (1, -1, 0), R8: (1, -1, -1)
+    // R Face (+X)
     const rCoords = [
       [1,  1,  1], [1,  1,  0], [1,  1, -1],
       [1,  0,  1], [1,  0,  0], [1,  0, -1],
@@ -243,15 +233,10 @@ export const Cube3D: React.FC<Cube3DProps> = ({
     for (let i = 0; i < 9; i++) {
       const [x, y, z] = rCoords[i];
       const cubie = findCubie(x, y, z);
-      if (cubie) {
-        cubie.mats[0].color.setHex(getFaceColor(facelets[9 + i]));
-      }
+      if (cubie) cubie.mats[0].color.setHex(getFaceColor(facelets[9 + i]));
     }
 
-    // 4. Front Face (+Z, index 4)
-    // F0: (-1, 1, 1), F1: (0, 1, 1), F2: (1, 1, 1)
-    // F3: (-1, 0, 1), F4: (0, 0, 1), F5: (1, 0, 1)
-    // F6: (-1, -1, 1), F7: (0, -1, 1), F8: (1, -1, 1)
+    // F Face (+Z)
     const fCoords = [
       [-1,  1, 1], [0,  1, 1], [1,  1, 1],
       [-1,  0, 1], [0,  0, 1], [1,  0, 1],
@@ -260,15 +245,10 @@ export const Cube3D: React.FC<Cube3DProps> = ({
     for (let i = 0; i < 9; i++) {
       const [x, y, z] = fCoords[i];
       const cubie = findCubie(x, y, z);
-      if (cubie) {
-        cubie.mats[4].color.setHex(getFaceColor(facelets[18 + i]));
-      }
+      if (cubie) cubie.mats[4].color.setHex(getFaceColor(facelets[18 + i]));
     }
 
-    // 5. Down Face (-Y, index 3)
-    // D0: (-1, -1, 1), D1: (0, -1, 1), D2: (1, -1, 1)
-    // D3: (-1, -1, 0), D4: (0, -1, 0), D5: (1, -1, 0)
-    // D6: (-1, -1, -1), D7: (0, -1, -1), D8: (1, -1, -1)
+    // D Face (-Y)
     const dCoords = [
       [-1, -1,  1], [0, -1,  1], [1, -1,  1],
       [-1, -1,  0], [0, -1,  0], [1, -1,  0],
@@ -277,15 +257,10 @@ export const Cube3D: React.FC<Cube3DProps> = ({
     for (let i = 0; i < 9; i++) {
       const [x, y, z] = dCoords[i];
       const cubie = findCubie(x, y, z);
-      if (cubie) {
-        cubie.mats[3].color.setHex(getFaceColor(facelets[27 + i]));
-      }
+      if (cubie) cubie.mats[3].color.setHex(getFaceColor(facelets[27 + i]));
     }
 
-    // 6. Left Face (-X, index 1)
-    // L0: (-1, 1, -1), L1: (-1, 1, 0), L2: (-1, 1, 1)
-    // L3: (-1, 0, -1), L4: (-1, 0, 0), L5: (-1, 0, 1)
-    // L6: (-1, -1, -1), L7: (-1, -1, 0), L8: (-1, -1, 1)
+    // L Face (-X)
     const lCoords = [
       [-1,  1, -1], [-1,  1, 0], [-1,  1, 1],
       [-1,  0, -1], [-1,  0, 0], [-1,  0, 1],
@@ -294,15 +269,10 @@ export const Cube3D: React.FC<Cube3DProps> = ({
     for (let i = 0; i < 9; i++) {
       const [x, y, z] = lCoords[i];
       const cubie = findCubie(x, y, z);
-      if (cubie) {
-        cubie.mats[1].color.setHex(getFaceColor(facelets[36 + i]));
-      }
+      if (cubie) cubie.mats[1].color.setHex(getFaceColor(facelets[36 + i]));
     }
 
-    // 7. Back Face (-Z, index 5)
-    // B0: (1, 1, -1), B1: (0, 1, -1), B2: (-1, 1, -1)
-    // B3: (1, 0, -1), B4: (0, 0, -1), B5: (-1, 0, -1)
-    // B6: (1, -1, -1), B7: (0, -1, -1), B8: (-1, -1, -1)
+    // B Face (-Z)
     const bCoords = [
       [ 1,  1, -1], [ 0,  1, -1], [-1,  1, -1],
       [ 1,  0, -1], [ 0,  0, -1], [-1,  0, -1],
@@ -311,17 +281,15 @@ export const Cube3D: React.FC<Cube3DProps> = ({
     for (let i = 0; i < 9; i++) {
       const [x, y, z] = bCoords[i];
       const cubie = findCubie(x, y, z);
-      if (cubie) {
-        cubie.mats[5].color.setHex(getFaceColor(facelets[45 + i]));
-      }
+      if (cubie) cubie.mats[5].color.setHex(getFaceColor(facelets[45 + i]));
     }
-  }, [facelets]);
+  }, [facelets, useCss3D]);
 
-  // Mouse & Touch Drag Handlers
+  // Pointer Drag Handlers
   const handlePointerDown = (e: React.PointerEvent) => {
     isDraggingRef.current = true;
     prevMousePosRef.current = { x: e.clientX, y: e.clientY };
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
@@ -331,8 +299,6 @@ export const Cube3D: React.FC<Cube3DProps> = ({
 
     rotationRef.current.y += deltaX * 0.01;
     rotationRef.current.x += deltaY * 0.01;
-
-    // Limit X axis rotation to avoid flipping upside-down
     rotationRef.current.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, rotationRef.current.x));
 
     cubeGroupRef.current.rotation.x = rotationRef.current.x;
@@ -344,29 +310,16 @@ export const Cube3D: React.FC<Cube3DProps> = ({
   const handlePointerUp = (e: React.PointerEvent) => {
     isDraggingRef.current = false;
     try {
-      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+      (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
     } catch {
       // ignore
     }
   };
 
-  // 2D Net Renderer Fallback
-  const netFaces = useMemo(() => {
-    if (!facelets || facelets.length !== 54) return null;
-    return {
-      U: facelets.slice(0, 9).split(''),
-      R: facelets.slice(9, 18).split(''),
-      F: facelets.slice(18, 27).split(''),
-      D: facelets.slice(27, 36).split(''),
-      L: facelets.slice(36, 45).split(''),
-      B: facelets.slice(45, 54).split(''),
-    };
-  }, [facelets]);
-
   return (
     <div className={`relative flex flex-col items-center justify-center select-none overflow-hidden ${className}`}>
-      {/* 3D Canvas Mount */}
-      {!is2DMode && (
+      {/* Three.js Canvas Mount */}
+      {!useCss3D && (
         <div
           ref={mountRef}
           onPointerDown={handlePointerDown}
@@ -377,82 +330,251 @@ export const Cube3D: React.FC<Cube3DProps> = ({
         />
       )}
 
-      {/* 2D Flat Net Preview */}
-      {is2DMode && netFaces && (
-        <div className="p-4 flex flex-col items-center justify-center">
-          <div className="grid grid-cols-4 gap-1.5 p-2 bg-surface rounded-lg border border-border">
-            {/* Row 1: Up face */}
-            <div className="col-start-2">
-              <MiniFace facelets={netFaces.U} />
-            </div>
-
-            {/* Row 2: Left, Front, Right, Back */}
-            <div className="col-start-1 row-start-2">
-              <MiniFace facelets={netFaces.L} />
-            </div>
-            <div className="col-start-2 row-start-2">
-              <MiniFace facelets={netFaces.F} />
-            </div>
-            <div className="col-start-3 row-start-2">
-              <MiniFace facelets={netFaces.R} />
-            </div>
-            <div className="col-start-4 row-start-2">
-              <MiniFace facelets={netFaces.B} />
-            </div>
-
-            {/* Row 3: Down face */}
-            <div className="col-start-2 row-start-3">
-              <MiniFace facelets={netFaces.D} />
-            </div>
-          </div>
-        </div>
+      {/* Pure CSS 3D Cube (ALWAYS a real 3D Cube in perspective, never a 2D net!) */}
+      {useCss3D && (
+        <CSS3DCube
+          facelets={facelets}
+          highlightMove={highlightMove}
+          className="w-full h-full min-h-[220px]"
+        />
       )}
 
-      {/* Control Buttons */}
+      {/* Controls */}
       {showControls && (
-        <div className="absolute bottom-2 right-2 flex items-center gap-1.5 bg-surface/80 backdrop-blur-md px-2 py-1 rounded-md border border-border text-text-muted text-xs">
-          {!is2DMode && (
+        <div className="absolute bottom-2 right-2 flex items-center gap-1.5 bg-surface/85 backdrop-blur-md px-2 py-1 rounded-md border border-border text-text-muted text-xs shadow-md">
+          {!useCss3D && (
             <button
               onClick={handleResetView}
-              title="Reset camera view"
+              title="Reset 3D camera angle"
               className="p-1 hover:text-text hover:bg-surface-elevated rounded transition-colors"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </button>
           )}
-          {webGlSupported && (
-            <button
-              onClick={() => setIs2DMode(!is2DMode)}
-              title={is2DMode ? 'Switch to 3D View' : 'Switch to 2D Net View'}
-              className="p-1 hover:text-text hover:bg-surface-elevated rounded transition-colors"
-            >
-              <Eye className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-      )}
-
-      {!webGlSupported && (
-        <div className="absolute top-2 left-2 flex items-center gap-1 text-[11px] text-warning bg-surface/90 px-2 py-0.5 rounded border border-warning/30">
-          <ShieldAlert className="w-3 h-3" /> 2D Fallback
+          <button
+            onClick={() => setUseCss3D(!useCss3D)}
+            title={useCss3D ? "Switch to WebGL 3D" : "Switch to CSS 3D"}
+            className="p-1 hover:text-text hover:bg-surface-elevated rounded transition-colors flex items-center gap-1"
+          >
+            <Box className="w-3.5 h-3.5" />
+            <span className="text-[10px]">{useCss3D ? 'CSS 3D' : 'WebGL'}</span>
+          </button>
         </div>
       )}
     </div>
   );
 };
 
-// Mini 3x3 face representation for 2D net view
-const MiniFace: React.FC<{ facelets: string[] }> = ({ facelets }) => {
+// =========================================================================
+// Real CSS 3D Cube (True 3D Cube using CSS 3D transforms: perspective + preserve-3d)
+// =========================================================================
+interface CSS3DCubeProps {
+  facelets: string;
+  highlightMove?: string;
+  className?: string;
+}
+
+export const CSS3DCube: React.FC<CSS3DCubeProps> = ({
+  facelets,
+  highlightMove,
+  className = ''
+}) => {
+  const [rotX, setRotX] = useState(-25);
+  const [rotY, setRotY] = useState(45);
+  const isDragging = useRef(false);
+  const lastPos = useRef({ x: 0, y: 0 });
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    isDragging.current = true;
+    lastPos.current = { x: e.clientX, y: e.clientY };
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isDragging.current) return;
+    const dx = e.clientX - lastPos.current.x;
+    const dy = e.clientY - lastPos.current.y;
+
+    setRotY((prev) => prev + dx * 0.7);
+    setRotX((prev) => Math.max(-80, Math.min(80, prev - dy * 0.7)));
+
+    lastPos.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    isDragging.current = false;
+    try {
+      (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
+    } catch {
+      // ignore
+    }
+  };
+
+  const resetView = () => {
+    setRotX(-25);
+    setRotY(45);
+  };
+
+  // Facelet mapping: 54 chars
+  // U: 0-8, R: 9-17, F: 18-26, D: 27-35, L: 36-44, B: 45-53
+  const faceStickers = useMemo(() => {
+    const safeStr = (facelets && facelets.length === 54)
+      ? facelets
+      : 'UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB';
+
+    return {
+      U: safeStr.slice(0, 9).split('') as FaceName[],
+      R: safeStr.slice(9, 18).split('') as FaceName[],
+      F: safeStr.slice(18, 27).split('') as FaceName[],
+      D: safeStr.slice(27, 36).split('') as FaceName[],
+      L: safeStr.slice(36, 45).split('') as FaceName[],
+      B: safeStr.slice(45, 54).split('') as FaceName[],
+    };
+  }, [facelets]);
+
+  // Which face is being highlighted by the current move?
+  const highlightedFace = highlightMove ? highlightMove.charAt(0).toUpperCase() : null;
+
+  // Cube dimensions
+  const cubeSize = 135; // px
+  const half = cubeSize / 2;
+
   return (
-    <div className="grid grid-cols-3 gap-0.5 p-0.5 bg-black/40 rounded">
-      {facelets.map((f, i) => (
+    <div
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      className={`relative flex items-center justify-center cursor-grab active:cursor-grabbing touch-none ${className}`}
+      style={{ perspective: '800px' }}
+    >
+      {/* 3D Cube Object */}
+      <div
+        className="relative transition-transform duration-75"
+        style={{
+          width: `${cubeSize}px`,
+          height: `${cubeSize}px`,
+          transformStyle: 'preserve-3d',
+          transform: `rotateX(${rotX}deg) rotateY(${rotY}deg)`
+        }}
+      >
+        {/* FRONT FACE (F) */}
         <div
-          key={i}
-          className="w-3.5 h-3.5 rounded-[2px]"
-          style={{ backgroundColor: FACE_COLORS[f as FaceName] || '#666' }}
-        />
-      ))}
+          className={`absolute inset-0 bg-[#0d121c] p-1.5 rounded-lg border-2 ${
+            highlightedFace === 'F' ? 'border-primary ring-4 ring-primary/40 animate-pulse' : 'border-[#1b2537]'
+          }`}
+          style={{
+            transform: `translateZ(${half}px)`,
+            backfaceVisibility: 'hidden',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+          }}
+        >
+          <FaceGrid stickers={faceStickers.F} />
+        </div>
+
+        {/* BACK FACE (B) */}
+        <div
+          className={`absolute inset-0 bg-[#0d121c] p-1.5 rounded-lg border-2 ${
+            highlightedFace === 'B' ? 'border-primary ring-4 ring-primary/40 animate-pulse' : 'border-[#1b2537]'
+          }`}
+          style={{
+            transform: `rotateY(180deg) translateZ(${half}px)`,
+            backfaceVisibility: 'hidden',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+          }}
+        >
+          <FaceGrid stickers={faceStickers.B} />
+        </div>
+
+        {/* TOP FACE (U) */}
+        <div
+          className={`absolute inset-0 bg-[#0d121c] p-1.5 rounded-lg border-2 ${
+            highlightedFace === 'U' ? 'border-primary ring-4 ring-primary/40 animate-pulse' : 'border-[#1b2537]'
+          }`}
+          style={{
+            transform: `rotateX(90deg) translateZ(${half}px)`,
+            backfaceVisibility: 'hidden',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+          }}
+        >
+          <FaceGrid stickers={faceStickers.U} />
+        </div>
+
+        {/* BOTTOM FACE (D) */}
+        <div
+          className={`absolute inset-0 bg-[#0d121c] p-1.5 rounded-lg border-2 ${
+            highlightedFace === 'D' ? 'border-primary ring-4 ring-primary/40 animate-pulse' : 'border-[#1b2537]'
+          }`}
+          style={{
+            transform: `rotateX(-90deg) translateZ(${half}px)`,
+            backfaceVisibility: 'hidden',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+          }}
+        >
+          <FaceGrid stickers={faceStickers.D} />
+        </div>
+
+        {/* LEFT FACE (L) */}
+        <div
+          className={`absolute inset-0 bg-[#0d121c] p-1.5 rounded-lg border-2 ${
+            highlightedFace === 'L' ? 'border-primary ring-4 ring-primary/40 animate-pulse' : 'border-[#1b2537]'
+          }`}
+          style={{
+            transform: `rotateY(-90deg) translateZ(${half}px)`,
+            backfaceVisibility: 'hidden',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+          }}
+        >
+          <FaceGrid stickers={faceStickers.L} />
+        </div>
+
+        {/* RIGHT FACE (R) */}
+        <div
+          className={`absolute inset-0 bg-[#0d121c] p-1.5 rounded-lg border-2 ${
+            highlightedFace === 'R' ? 'border-primary ring-4 ring-primary/40 animate-pulse' : 'border-[#1b2537]'
+          }`}
+          style={{
+            transform: `rotateY(90deg) translateZ(${half}px)`,
+            backfaceVisibility: 'hidden',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+          }}
+        >
+          <FaceGrid stickers={faceStickers.R} />
+        </div>
+      </div>
+
+      {/* Reset button inside CSS 3D */}
+      <button
+        onClick={resetView}
+        title="Reset 3D angle"
+        className="absolute top-2 right-2 p-1 bg-surface/80 hover:bg-surface-elevated text-text-muted hover:text-text border border-border rounded-md text-xs transition-colors"
+      >
+        <RotateCcw className="w-3.5 h-3.5" />
+      </button>
     </div>
   );
 };
 
+// 3x3 Face Grid of glossy stickers
+const FaceGrid: React.FC<{ stickers: FaceName[] }> = ({ stickers }) => {
+  return (
+    <div className="w-full h-full grid grid-cols-3 gap-1.5">
+      {stickers.map((faceCode, idx) => {
+        const bg = FACE_COLORS[faceCode] || '#666';
+        return (
+          <div
+            key={idx}
+            className="w-full h-full rounded-[4px] shadow-sm relative overflow-hidden transition-colors"
+            style={{
+              backgroundColor: bg,
+              boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.3), 0 1px 2px rgba(0,0,0,0.4)'
+            }}
+          >
+            {/* Subtle gloss highlight on stickers */}
+            <div className="absolute top-0 left-0 right-0 h-1/3 bg-white/15 rounded-t-[4px] pointer-events-none" />
+          </div>
+        );
+      })}
+    </div>
+  );
+};

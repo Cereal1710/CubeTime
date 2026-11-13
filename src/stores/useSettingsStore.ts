@@ -17,9 +17,9 @@ interface SettingsStore extends AppSettings {
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  inspection: 0,
+  inspection: 15,
   precision: 'hundredths',
-  holdToReadyMs: 300,
+  holdToReadyMs: 500,
   soundEnabled: true,
   autoStartOnCubeMove: true,
   autoStopOnCubeSolved: true,

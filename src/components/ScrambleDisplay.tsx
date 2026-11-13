@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
-import { Copy, Check, RefreshCw, Box } from 'lucide-react';
+import { Copy, Check, RefreshCw, Box, Sparkles } from 'lucide-react';
 import { useSettingsStore } from '../stores/useSettingsStore';
 
 interface ScrambleDisplayProps {
   scramble: string;
   onNewScramble: () => void;
+  onOpenGuide?: () => void;
 }
 
 export const ScrambleDisplay: React.FC<ScrambleDisplayProps> = ({
   scramble,
   onNewScramble,
+  onOpenGuide,
 }) => {
   const [copied, setCopied] = useState(false);
   const { show3DPreview, setShow3DPreview } = useSettingsStore();
@@ -35,6 +37,18 @@ export const ScrambleDisplay: React.FC<ScrambleDisplayProps> = ({
 
       {/* Action Buttons */}
       <div className="flex items-center gap-2 shrink-0">
+        {/* Scramble Guide Assistant Button */}
+        {onOpenGuide && (
+          <button
+            onClick={onOpenGuide}
+            title="Mở hướng dẫn làm theo scramble (CubeStation style)"
+            className="p-2 px-3 rounded-lg bg-primary/15 hover:bg-primary/25 border border-primary/40 text-primary text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>Hướng dẫn Scramble</span>
+          </button>
+        )}
+
         <button
           onClick={() => setShow3DPreview(!show3DPreview)}
           title={show3DPreview ? 'Hide 3D Preview' : 'Show 3D Preview'}
@@ -78,4 +92,3 @@ export const ScrambleDisplay: React.FC<ScrambleDisplayProps> = ({
     </div>
   );
 };
-

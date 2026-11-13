@@ -162,7 +162,7 @@ export const SettingsPage: React.FC = () => {
               <p className="text-[11px] text-text-muted">
                 {inspection > 0
                   ? 'Counts down before solve. Standard WCA rules (+2 at 15s, DNF at 17s).'
-                  : 'Timer starts immediately upon releasing Space or screen.'}
+                  : 'Timer starts immediately upon releasing Shift keys or pads.'}
               </p>
             </div>
 
@@ -211,21 +211,36 @@ export const SettingsPage: React.FC = () => {
               </p>
             </div>
 
-            {/* 3D Preview Toggle */}
+            {/* 3D Preview & Sound Toggles */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-text">Visuals & Feedback</label>
-              <label className="flex items-center justify-between p-3 rounded-xl bg-surface-elevated border border-border cursor-pointer">
-                <div className="flex items-center gap-2">
-                  <Eye className="w-4 h-4 text-primary" />
-                  <span className="text-xs font-semibold text-text">Show 3D Cube Preview on Timer</span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={show3DPreview}
-                  onChange={(e) => setShow3DPreview(e.target.checked)}
-                  className="w-4 h-4 accent-primary rounded cursor-pointer"
-                />
-              </label>
+              <label className="text-xs font-semibold text-text">Visuals & Audio Feedback</label>
+              <div className="space-y-2">
+                <label className="flex items-center justify-between p-2.5 rounded-xl bg-surface-elevated border border-border cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-primary" />
+                    <span className="text-xs font-semibold text-text">Show 3D Cube Preview</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={show3DPreview}
+                    onChange={(e) => setShow3DPreview(e.target.checked)}
+                    className="w-4 h-4 accent-primary rounded cursor-pointer"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between p-2.5 rounded-xl bg-surface-elevated border border-border cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <Volume2 className="w-4 h-4 text-primary" />
+                    <span className="text-xs font-semibold text-text">Timer & Scramble Sound Effects</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={soundEnabled}
+                    onChange={(e) => setSoundEnabled(e.target.checked)}
+                    className="w-4 h-4 accent-primary rounded cursor-pointer"
+                  />
+                </label>
+              </div>
             </div>
           </div>
         </div>

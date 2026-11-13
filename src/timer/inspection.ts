@@ -46,6 +46,10 @@ export class InspectionTimer {
     }, 100);
   }
 
+  isActive(): boolean {
+    return this.timerId !== null || this.startTime !== 0;
+  }
+
   stop(): InspectionResult {
     if (this.timerId !== null) {
       clearInterval(this.timerId);

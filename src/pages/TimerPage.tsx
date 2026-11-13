@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { TimerDisplay } from '../components/TimerDisplay';
 import { ScrambleDisplay } from '../components/ScrambleDisplay';
+import { ScrambleGuideModal } from '../components/ScrambleGuideModal';
 import { StatCard } from '../components/StatCard';
 import { Cube3D } from '../components/Cube3D';
 import { generate3x3Scramble } from '../cube/scramble';
@@ -44,6 +45,7 @@ export const TimerPage: React.FC = () => {
   const [newSessionName, setNewSessionName] = useState('');
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editSessionName, setEditSessionName] = useState('');
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
 
   // Generate initial scramble
   const handleGenerateScramble = useCallback(() => {
@@ -290,8 +292,17 @@ export const TimerPage: React.FC = () => {
         <ScrambleDisplay
           scramble={currentScramble}
           onNewScramble={handleGenerateScramble}
+          onOpenGuide={() => setIsGuideOpen(true)}
         />
       </div>
+
+      {/* Scramble Assistant / Guide Modal */}
+      <ScrambleGuideModal
+        scramble={currentScramble}
+        isOpen={isGuideOpen}
+        onClose={() => setIsGuideOpen(false)}
+        onReadyToSolve={() => setIsGuideOpen(false)}
+      />
 
       {/* Main Center Area: Timer Display with optional 3D Preview */}
       <div className="flex-1 flex flex-col lg:flex-row items-center justify-center gap-4 my-2">
@@ -388,7 +399,7 @@ export const TimerPage: React.FC = () => {
 
       {/* Keyboard hints */}
       <footer className="mt-3 text-center text-[11px] text-text-muted/60">
-        <span>Space: Hold to ready • Release to start • Tap to stop • Esc: Cancel</span>
+        <span>L-Shift & R-Shift: Giữ 500ms để sẵn sàng • Thả tay để Inspection / Tính giờ • Đặt cả 2 Shift để Dừng • Esc: Hủy</span>
       </footer>
     </div>
   );

@@ -19,8 +19,8 @@ export class TimerEngine {
   private isHoldingFromInspection: boolean = false;
 
   // Configurable options
-  public holdToReadyMs: number = 300;
-  public inspectionTime: InspectionTime = 0;
+  public holdToReadyMs: number = 500;
+  public inspectionTime: InspectionTime = 15;
 
   private listeners: Set<TimerListener> = new Set();
 
@@ -57,7 +57,7 @@ export class TimerEngine {
   }
 
   /**
-   * Called on Space down or Touch down
+   * Called when both triggers (LShift + RShift or two touch pads) are pressed down
    */
   handleTriggerDown(): void {
     if (this.state === 'running') {
@@ -66,12 +66,6 @@ export class TimerEngine {
     }
 
     if (this.state === 'idle' || this.state === 'stopped') {
-      if (this.inspectionTime > 0) {
-        // Start inspection directly on tap/press if in idle/stopped
-        this.startInspection();
-        return;
-      }
-
       this.isHoldingFromInspection = false;
       this.startHolding();
       return;
@@ -85,7 +79,7 @@ export class TimerEngine {
   }
 
   /**
-   * Called on Space up or Touch up
+   * Called when either trigger is released
    */
   handleTriggerUp(): void {
     if (this.holdTimeoutId !== null) {
@@ -94,7 +88,7 @@ export class TimerEngine {
     }
 
     if (this.state === 'holding') {
-      // Released too early (didn't reach ready)
+      // Released too early (didn't reach 500ms ready threshold)
       if (this.isHoldingFromInspection) {
         this.setState('inspection');
       } else {
@@ -104,7 +98,13 @@ export class TimerEngine {
     }
 
     if (this.state === 'ready') {
-      this.startRunning();
+      if (this.inspectionTime > 0 && !this.isHoldingFromInspection) {
+        // Holding 500ms completed from idle/stopped -> releasing begins inspection countdown!
+        this.startInspection();
+      } else {
+        // Either in inspection or inspection disabled -> begins solve timer!
+        this.startRunning();
+      }
       return;
     }
   }
@@ -113,6 +113,11 @@ export class TimerEngine {
     this.setState('holding');
     this.holdTimeoutId = window.setTimeout(() => {
       if (this.state === 'holding') {
+        // When reaching READY during inspection: stop inspection timer immediately!
+        if (this.isHoldingFromInspection) {
+          const inspResult = this.inspectionTimer.stop();
+          this.pendingPenalty = inspResult.penalty;
+        }
         this.setState('ready');
       }
     }, this.holdToReadyMs);
@@ -132,8 +137,10 @@ export class TimerEngine {
 
   private startRunning(): void {
     if (this.state === 'ready') {
-      const inspResult = this.inspectionTimer.stop();
-      this.pendingPenalty = inspResult.penalty;
+      if (this.inspectionTimer.isActive()) {
+        const inspResult = this.inspectionTimer.stop();
+        this.pendingPenalty = inspResult.penalty;
+      }
     }
 
     this.startTime = performance.now();
@@ -155,8 +162,10 @@ export class TimerEngine {
   startFromSmartCube(): void {
     if (this.state === 'running') return;
     if (this.state === 'inspection' || this.state === 'ready') {
-      const inspResult = this.inspectionTimer.stop();
-      this.pendingPenalty = inspResult.penalty;
+      if (this.inspectionTimer.isActive()) {
+        const inspResult = this.inspectionTimer.stop();
+        this.pendingPenalty = inspResult.penalty;
+      }
     } else {
       this.pendingPenalty = 'none';
     }
