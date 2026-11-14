@@ -36,7 +36,7 @@ export const TimerPage: React.FC = () => {
     deleteSolve,
   } = useSessionStore();
 
-  const { precision, show3DPreview } = useSettingsStore();
+  const { precision, show3DPreview, triggerMode, holdToReadyMs } = useSettingsStore();
 
   const [currentScramble, setCurrentScramble] = useState<string>('');
   const [facelets, setFacelets] = useState<string>(cubeEngine.getFacelets());
@@ -399,7 +399,11 @@ export const TimerPage: React.FC = () => {
 
       {/* Keyboard hints */}
       <footer className="mt-3 text-center text-[11px] text-text-muted/60">
-        <span>L-Shift & R-Shift: Giữ 500ms để sẵn sàng • Thả tay để Inspection / Tính giờ • Đặt cả 2 Shift để Dừng • Esc: Hủy</span>
+        {triggerMode === 'dual-shift' ? (
+          <span>L-Shift & R-Shift: Giữ {holdToReadyMs}ms để sẵn sàng • Thả tay để Inspection / Tính giờ • Đặt cả 2 Shift để Dừng • Esc: Hủy</span>
+        ) : (
+          <span>Phím Space: Giữ {holdToReadyMs}ms để sẵn sàng • Thả tay để Inspection / Tính giờ • Nhấn Space để Dừng • Esc: Hủy</span>
+        )}
       </footer>
     </div>
   );

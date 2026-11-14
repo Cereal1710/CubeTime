@@ -19,16 +19,18 @@ export const TimerDisplay: React.FC<TimerDisplayProps> = ({
   const [inspectionText, setInspectionText] = useState<string>('');
   const [isLeftDown, setIsLeftDown] = useState<boolean>(false);
   const [isRightDown, setIsRightDown] = useState<boolean>(false);
+  const [isSpaceDown, setIsSpaceDown] = useState<boolean>(false);
 
-  const { precision, inspection, holdToReadyMs } = useSettingsStore();
+  const { precision, inspection, holdToReadyMs, triggerMode } = useSettingsStore();
 
   const leftDownRef = useRef(false);
   const rightDownRef = useRef(false);
   const bothDownRef = useRef(false);
+  const spaceDownRef = useRef(false);
 
   useEffect(() => {
-    // Ensure timerEngine has current settings
-    timerEngine.holdToReadyMs = holdToReadyMs || 500;
+    // Keep timerEngine synced with user settings
+    timerEngine.holdToReadyMs = holdToReadyMs !== undefined ? holdToReadyMs : 500;
     timerEngine.inspectionTime = inspection;
 
     const unsubscribe = timerEngine.subscribe({
@@ -56,7 +58,7 @@ export const TimerDisplay: React.FC<TimerDisplayProps> = ({
     };
   }, [onSolveComplete, holdToReadyMs, inspection]);
 
-  // Check if both triggers are down
+  // Dual Shift trigger checker
   const updateBothTriggers = useCallback(() => {
     const isBoth = leftDownRef.current && rightDownRef.current;
     if (isBoth && !bothDownRef.current) {
@@ -85,12 +87,33 @@ export const TimerDisplay: React.FC<TimerDisplayProps> = ({
         leftDownRef.current = false;
         rightDownRef.current = false;
         bothDownRef.current = false;
+        spaceDownRef.current = false;
         setIsLeftDown(false);
         setIsRightDown(false);
+        setIsSpaceDown(false);
         return;
       }
 
-      // Track Left Shift and Right Shift keys (both required to start & stop)
+      // SPACE MODE
+      if (triggerMode === 'space') {
+        if (e.code === 'Space') {
+          e.preventDefault();
+          if (timerEngine.getState() === 'running') {
+            timerEngine.stop();
+            spaceDownRef.current = false;
+            setIsSpaceDown(false);
+            return;
+          }
+          if (!spaceDownRef.current) {
+            spaceDownRef.current = true;
+            setIsSpaceDown(true);
+            timerEngine.handleTriggerDown();
+          }
+        }
+        return;
+      }
+
+      // DUAL SHIFT MODE (Stackmat)
       if (e.code === 'ShiftLeft') {
         e.preventDefault();
         if (!leftDownRef.current) {
@@ -107,7 +130,7 @@ export const TimerDisplay: React.FC<TimerDisplayProps> = ({
         }
       }
     },
-    [updateBothTriggers]
+    [triggerMode, updateBothTriggers]
   );
 
   const handleKeyUp = useCallback(
@@ -121,6 +144,18 @@ export const TimerDisplay: React.FC<TimerDisplayProps> = ({
         return;
       }
 
+      // SPACE MODE
+      if (triggerMode === 'space') {
+        if (e.code === 'Space') {
+          e.preventDefault();
+          spaceDownRef.current = false;
+          setIsSpaceDown(false);
+          timerEngine.handleTriggerUp();
+        }
+        return;
+      }
+
+      // DUAL SHIFT MODE
       if (e.code === 'ShiftLeft') {
         e.preventDefault();
         leftDownRef.current = false;
@@ -133,7 +168,7 @@ export const TimerDisplay: React.FC<TimerDisplayProps> = ({
         updateBothTriggers();
       }
     },
-    [updateBothTriggers]
+    [triggerMode, updateBothTriggers]
   );
 
   useEffect(() => {
@@ -147,6 +182,17 @@ export const TimerDisplay: React.FC<TimerDisplayProps> = ({
 
   // Touch screen multi-touch anywhere on the main area
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (triggerMode === 'space') {
+      if (timerEngine.getState() === 'running') {
+        timerEngine.stop();
+        return;
+      }
+      spaceDownRef.current = true;
+      setIsSpaceDown(true);
+      timerEngine.handleTriggerDown();
+      return;
+    }
+
     // 2-finger touch automatically engages both hands!
     if (e.touches.length >= 2) {
       leftDownRef.current = true;
@@ -158,6 +204,13 @@ export const TimerDisplay: React.FC<TimerDisplayProps> = ({
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
+    if (triggerMode === 'space') {
+      spaceDownRef.current = false;
+      setIsSpaceDown(false);
+      timerEngine.handleTriggerUp();
+      return;
+    }
+
     if (e.touches.length < 2) {
       leftDownRef.current = false;
       rightDownRef.current = false;
@@ -204,6 +257,29 @@ export const TimerDisplay: React.FC<TimerDisplayProps> = ({
     updateBothTriggers();
   };
 
+  // Space Pad Pointer Handlers
+  const handleSpacePadDown = (e: React.PointerEvent) => {
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    if (timerEngine.getState() === 'running') {
+      timerEngine.stop();
+      return;
+    }
+    spaceDownRef.current = true;
+    setIsSpaceDown(true);
+    timerEngine.handleTriggerDown();
+  };
+
+  const handleSpacePadUp = (e: React.PointerEvent) => {
+    try {
+      (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
+    } catch {
+      // ignore
+    }
+    spaceDownRef.current = false;
+    setIsSpaceDown(false);
+    timerEngine.handleTriggerUp();
+  };
+
   // Color selection based on timer state
   const getTimerColorClass = () => {
     switch (timerState) {
@@ -223,9 +299,12 @@ export const TimerDisplay: React.FC<TimerDisplayProps> = ({
   };
 
   const getSubheaderMessage = () => {
+    const isSpace = triggerMode === 'space';
+    const holdText = holdToReadyMs > 0 ? `GIỮ ${holdToReadyMs}MS ĐỂ SẴN SÀNG...` : 'SẴN SÀNG...';
+
     switch (timerState) {
       case 'holding':
-        return 'GIỮ 500MS ĐỂ SẴN SÀNG...';
+        return holdText;
       case 'ready':
         if (inspection > 0 && timerEngine.getElapsedMs() === 0 && !inspectionText) {
           return '🟢 SẴN SÀNG — THẢ TAY ĐỂ BẮT ĐẦU INSPECTION!';
@@ -234,15 +313,21 @@ export const TimerDisplay: React.FC<TimerDisplayProps> = ({
       case 'inspection':
         return `INSPECTION — ${inspectionText}`;
       case 'running':
-        return 'ĐANG GIẢI... (ĐẶT CẢ 2 TAY LÊN L-SHIFT VÀ R-SHIFT ĐỂ DỪNG GIỜ)';
+        return isSpace
+          ? 'ĐANG GIẢI... (NHẤN SPACE HOẶC CHẠM MÀN HÌNH ĐỂ DỪNG)'
+          : 'ĐANG GIẢI... (ĐẶT CẢ 2 TAY LÊN L-SHIFT VÀ R-SHIFT ĐỂ DỪNG GIỜ)';
       case 'stopped':
         return 'HOÀN THÀNH LƯỢT GIẢI';
       case 'idle':
       default:
-        if (inspection > 0) {
-          return 'GIỮ ĐỒNG THỜI 2 NÚT L-SHIFT VÀ R-SHIFT (500MS) ĐỂ INSPECTION';
+        if (isSpace) {
+          return inspection > 0
+            ? 'GIỮ PHÍM SPACE ĐỂ BẮT ĐẦU INSPECTION'
+            : 'GIỮ PHÍM SPACE ĐỂ SẴN SÀNG';
         }
-        return 'GIỮ ĐỒNG THỜI 2 NÚT L-SHIFT VÀ R-SHIFT (500MS) ĐỂ SẴN SÀNG';
+        return inspection > 0
+          ? 'GIỮ ĐỒNG THỜI 2 NÚT L-SHIFT VÀ R-SHIFT ĐỂ INSPECTION'
+          : 'GIỮ ĐỒNG THỜI 2 NÚT L-SHIFT VÀ R-SHIFT ĐỂ SẴN SÀNG';
     }
   };
 
@@ -281,73 +366,106 @@ export const TimerDisplay: React.FC<TimerDisplayProps> = ({
           : formatTime(displayMs, precision)}
       </div>
 
-      {/* Dual Shift / Stackmat Two-Hand Pads */}
-      <div className="mt-6 w-full max-w-lg flex items-center justify-between gap-4 px-4">
-        {/* Left Hand Pad (L-Shift) */}
-        <div
-          onPointerDown={handleLeftPadDown}
-          onPointerUp={handleLeftPadUp}
-          onPointerLeave={handleLeftPadUp}
-          onPointerCancel={handleLeftPadUp}
-          className={`flex-1 p-3.5 rounded-2xl border-2 flex flex-col items-center justify-center cursor-pointer touch-none transition-all ${
-            isLeftDown
-              ? timerState === 'ready'
-                ? 'bg-success/20 border-success text-success shadow-lg shadow-success/20 scale-[0.98]'
-                : 'bg-danger/20 border-danger text-danger shadow-lg shadow-danger/20 scale-[0.98]'
-              : 'bg-surface hover:bg-surface-elevated border-border text-text-muted'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <span className={`w-3 h-3 rounded-full ${isLeftDown ? (timerState === 'ready' ? 'bg-success' : 'bg-danger') : 'bg-border'}`} />
-            <span className="font-bold text-sm">Tay Trái</span>
+      {/* CONTROL PADS */}
+      {triggerMode === 'dual-shift' ? (
+        /* Dual Shift / Stackmat Two-Hand Pads */
+        <div className="mt-6 w-full max-w-lg flex items-center justify-between gap-4 px-4">
+          {/* Left Hand Pad (L-Shift) */}
+          <div
+            onPointerDown={handleLeftPadDown}
+            onPointerUp={handleLeftPadUp}
+            onPointerLeave={handleLeftPadUp}
+            onPointerCancel={handleLeftPadUp}
+            className={`flex-1 p-3.5 rounded-2xl border-2 flex flex-col items-center justify-center cursor-pointer touch-none transition-all ${
+              isLeftDown
+                ? timerState === 'ready'
+                  ? 'bg-success/20 border-success text-success shadow-lg shadow-success/20 scale-[0.98]'
+                  : 'bg-danger/20 border-danger text-danger shadow-lg shadow-danger/20 scale-[0.98]'
+                : 'bg-surface hover:bg-surface-elevated border-border text-text-muted'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span className={`w-3 h-3 rounded-full ${isLeftDown ? (timerState === 'ready' ? 'bg-success' : 'bg-danger') : 'bg-border'}`} />
+              <span className="font-bold text-sm">Tay Trái</span>
+            </div>
+            <span className="text-[11px] font-mono mt-1 opacity-80">[L-Shift]</span>
           </div>
-          <span className="text-[11px] font-mono mt-1 opacity-80">[L-Shift]</span>
-        </div>
 
-        {/* Center Hand Status Indicator */}
-        <div className="shrink-0 flex flex-col items-center justify-center px-2">
-          {isLeftDown && isRightDown ? (
-            <div className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-              timerState === 'ready' ? 'bg-success text-background animate-pulse' : 'bg-danger text-background'
-            }`}>
-              {timerState === 'ready' ? 'READY (THẢ RA)' : 'GIỮ 500MS...'}
-            </div>
-          ) : isLeftDown || isRightDown ? (
-            <div className="px-2.5 py-1 rounded-full bg-warning/20 border border-warning/40 text-warning text-[10px] font-semibold text-center">
-              CẦN CẢ 2 TAY
-            </div>
-          ) : (
-            <div className="text-[10px] text-text-muted/60 text-center font-medium">
-              STACKMAT
-            </div>
-          )}
-        </div>
-
-        {/* Right Hand Pad (R-Shift) */}
-        <div
-          onPointerDown={handleRightPadDown}
-          onPointerUp={handleRightPadUp}
-          onPointerLeave={handleRightPadUp}
-          onPointerCancel={handleRightPadUp}
-          className={`flex-1 p-3.5 rounded-2xl border-2 flex flex-col items-center justify-center cursor-pointer touch-none transition-all ${
-            isRightDown
-              ? timerState === 'ready'
-                ? 'bg-success/20 border-success text-success shadow-lg shadow-success/20 scale-[0.98]'
-                : 'bg-danger/20 border-danger text-danger shadow-lg shadow-danger/20 scale-[0.98]'
-              : 'bg-surface hover:bg-surface-elevated border-border text-text-muted'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <span className={`w-3 h-3 rounded-full ${isRightDown ? (timerState === 'ready' ? 'bg-success' : 'bg-danger') : 'bg-border'}`} />
-            <span className="font-bold text-sm">Tay Phải</span>
+          {/* Center Hand Status Indicator */}
+          <div className="shrink-0 flex flex-col items-center justify-center px-2">
+            {isLeftDown && isRightDown ? (
+              <div className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                timerState === 'ready' ? 'bg-success text-background animate-pulse' : 'bg-danger text-background'
+              }`}>
+                {timerState === 'ready' ? 'READY (THẢ RA)' : `GIỮ ${holdToReadyMs}MS`}
+              </div>
+            ) : isLeftDown || isRightDown ? (
+              <div className="px-2.5 py-1 rounded-full bg-warning/20 border border-warning/40 text-warning text-[10px] font-semibold text-center">
+                CẦN CẢ 2 TAY
+              </div>
+            ) : (
+              <div className="text-[10px] text-text-muted/60 text-center font-medium">
+                STACKMAT
+              </div>
+            )}
           </div>
-          <span className="text-[11px] font-mono mt-1 opacity-80">[R-Shift]</span>
+
+          {/* Right Hand Pad (R-Shift) */}
+          <div
+            onPointerDown={handleRightPadDown}
+            onPointerUp={handleRightPadUp}
+            onPointerLeave={handleRightPadUp}
+            onPointerCancel={handleRightPadUp}
+            className={`flex-1 p-3.5 rounded-2xl border-2 flex flex-col items-center justify-center cursor-pointer touch-none transition-all ${
+              isRightDown
+                ? timerState === 'ready'
+                  ? 'bg-success/20 border-success text-success shadow-lg shadow-success/20 scale-[0.98]'
+                  : 'bg-danger/20 border-danger text-danger shadow-lg shadow-danger/20 scale-[0.98]'
+                : 'bg-surface hover:bg-surface-elevated border-border text-text-muted'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span className={`w-3 h-3 rounded-full ${isRightDown ? (timerState === 'ready' ? 'bg-success' : 'bg-danger') : 'bg-border'}`} />
+              <span className="font-bold text-sm">Tay Phải</span>
+            </div>
+            <span className="text-[11px] font-mono mt-1 opacity-80">[R-Shift]</span>
+          </div>
         </div>
-      </div>
+      ) : (
+        /* Single Spacebar Pad */
+        <div className="mt-6 w-full max-w-md px-4">
+          <div
+            onPointerDown={handleSpacePadDown}
+            onPointerUp={handleSpacePadUp}
+            onPointerLeave={handleSpacePadUp}
+            onPointerCancel={handleSpacePadUp}
+            className={`w-full py-4 px-6 rounded-2xl border-2 flex items-center justify-center gap-3 cursor-pointer touch-none transition-all ${
+              isSpaceDown
+                ? timerState === 'ready'
+                  ? 'bg-success/20 border-success text-success shadow-lg shadow-success/20 scale-[0.98]'
+                  : 'bg-danger/20 border-danger text-danger shadow-lg shadow-danger/20 scale-[0.98]'
+                : 'bg-surface hover:bg-surface-elevated border-border text-text-muted'
+            }`}
+          >
+            <span className={`w-3 h-3 rounded-full ${isSpaceDown ? (timerState === 'ready' ? 'bg-success' : 'bg-danger') : 'bg-border'}`} />
+            <span className="font-bold text-sm tracking-wide">
+              {isSpaceDown
+                ? timerState === 'ready'
+                  ? 'SẴN SÀNG — THẢ TAY ĐỂ BẮT ĐẦU'
+                  : `ĐANG GIỮ (${holdToReadyMs}MS)...`
+                : '␣ PHÍM SPACE (CHẠM & GIỮ ĐỂ BẮT ĐẦU)'}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Helpful Hint Footer */}
       <div className="mt-3 text-[11px] text-text-muted/70 text-center">
-        <span>Bắt đầu & Dừng: Giữ đồng thời cả 2 phím <strong>L-Shift</strong> và <strong>R-Shift</strong> (Mô phỏng Stackmat thi đấu)</span>
+        {triggerMode === 'dual-shift' ? (
+          <span>Bắt đầu & Dừng: Giữ đồng thời cả 2 phím <strong>L-Shift</strong> và <strong>R-Shift</strong> (Mô phỏng Stackmat thi đấu)</span>
+        ) : (
+          <span>Bắt đầu & Dừng: Sử dụng phím <strong>Space</strong> (Nhấn giữ để sẵn sàng • Thả ra để chạy • Nhấn để dừng)</span>
+        )}
       </div>
     </div>
   );

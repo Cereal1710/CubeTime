@@ -27,11 +27,13 @@ export interface Session {
 
 export type InspectionTime = 0 | 15 | 17;
 export type TimerPrecision = 'hundredths' | 'thousandths';
+export type TimerTriggerMode = 'dual-shift' | 'space';
 
 export interface AppSettings {
   inspection: InspectionTime;
   precision: TimerPrecision;
   holdToReadyMs: number;
+  triggerMode: TimerTriggerMode;
   soundEnabled: boolean;
   autoStartOnCubeMove: boolean;
   autoStopOnCubeSolved: boolean;

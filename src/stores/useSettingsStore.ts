@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { AppSettings, InspectionTime, TimerPrecision } from '../types';
+import type { AppSettings, InspectionTime, TimerPrecision, TimerTriggerMode } from '../types';
 import { timerEngine } from '../timer/timerEngine';
 import { smartCubeManager } from '../bluetooth/connection';
 
@@ -8,6 +8,7 @@ interface SettingsStore extends AppSettings {
   setInspection: (val: InspectionTime) => void;
   setPrecision: (val: TimerPrecision) => void;
   setHoldToReadyMs: (val: number) => void;
+  setTriggerMode: (val: TimerTriggerMode) => void;
   setSoundEnabled: (val: boolean) => void;
   setAutoStartOnCubeMove: (val: boolean) => void;
   setAutoStopOnCubeSolved: (val: boolean) => void;
@@ -20,6 +21,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   inspection: 15,
   precision: 'hundredths',
   holdToReadyMs: 500,
+  triggerMode: 'dual-shift',
   soundEnabled: true,
   autoStartOnCubeMove: true,
   autoStopOnCubeSolved: true,
@@ -43,6 +45,8 @@ export const useSettingsStore = create<SettingsStore>()(
         timerEngine.holdToReadyMs = holdToReadyMs;
         set({ holdToReadyMs });
       },
+
+      setTriggerMode: (triggerMode) => set({ triggerMode }),
 
       setSoundEnabled: (soundEnabled) => set({ soundEnabled }),
 

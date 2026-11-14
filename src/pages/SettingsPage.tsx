@@ -10,7 +10,8 @@ import {
   AlertTriangle,
   RotateCcw,
   Eye,
-  Volume2
+  Volume2,
+  Keyboard
 } from 'lucide-react';
 import { useSettingsStore } from '../stores/useSettingsStore';
 import { useSessionStore } from '../stores/useSessionStore';
@@ -22,6 +23,7 @@ export const SettingsPage: React.FC = () => {
     inspection,
     precision,
     holdToReadyMs,
+    triggerMode,
     soundEnabled,
     autoStartOnCubeMove,
     autoStopOnCubeSolved,
@@ -29,6 +31,7 @@ export const SettingsPage: React.FC = () => {
     setInspection,
     setPrecision,
     setHoldToReadyMs,
+    setTriggerMode,
     setSoundEnabled,
     setAutoStartOnCubeMove,
     setAutoStopOnCubeSolved,
@@ -137,6 +140,55 @@ export const SettingsPage: React.FC = () => {
             Timer Configuration
           </h3>
 
+          {/* Trigger Mode Selection */}
+          <div className="space-y-2 pb-2 border-b border-border/60">
+            <label className="text-xs font-semibold text-text flex items-center gap-1.5">
+              <Keyboard className="w-4 h-4 text-primary" />
+              Chế độ Phím điều khiển Timer (Trigger Mode)
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setTriggerMode('dual-shift')}
+                className={`p-3.5 rounded-xl border text-left transition-all ${
+                  triggerMode === 'dual-shift'
+                    ? 'bg-primary/15 border-primary shadow-sm text-text'
+                    : 'bg-surface-elevated border-border text-text-muted hover:text-text'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-sm">2 Phím Shift (Stackmat)</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-background border border-border">
+                    L-Shift + R-Shift
+                  </span>
+                </div>
+                <p className="text-xs text-text-muted mt-1 leading-relaxed">
+                  Bắt buộc đặt cả 2 tay lên Shift Trái và Shift Phải để bắt đầu & dừng giờ (mô phỏng thảm thi đấu chuẩn WCA).
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTriggerMode('space')}
+                className={`p-3.5 rounded-xl border text-left transition-all ${
+                  triggerMode === 'space'
+                    ? 'bg-primary/15 border-primary shadow-sm text-text'
+                    : 'bg-surface-elevated border-border text-text-muted hover:text-text'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-sm">Phím Space (Truyền thống)</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-background border border-border">
+                    Spacebar
+                  </span>
+                </div>
+                <p className="text-xs text-text-muted mt-1 leading-relaxed">
+                  Giữ phím Space (hoặc chạm màn hình) để sẵn sàng, thả ra để bắt đầu và nhấn lại để dừng giờ nhanh gọn.
+                </p>
+              </button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {/* WCA Inspection */}
             <div className="space-y-1.5">
@@ -162,7 +214,54 @@ export const SettingsPage: React.FC = () => {
               <p className="text-[11px] text-text-muted">
                 {inspection > 0
                   ? 'Counts down before solve. Standard WCA rules (+2 at 15s, DNF at 17s).'
-                  : 'Timer starts immediately upon releasing Shift keys or pads.'}
+                  : 'Timer starts immediately upon releasing trigger keys or pads.'}
+              </p>
+            </div>
+
+            {/* Hold to Ready Slider & Presets */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-text">Thời gian giữ sẵn sàng (Hold-to-Ready)</label>
+                <span className="font-mono text-xs font-bold text-primary px-2 py-0.5 rounded bg-primary/10 border border-primary/20">
+                  {holdToReadyMs} ms
+                </span>
+              </div>
+
+              {/* Quick Presets */}
+              <div className="grid grid-cols-5 gap-1.5">
+                {[
+                  { label: '0ms', value: 0 },
+                  { label: '200ms', value: 200 },
+                  { label: '300ms', value: 300 },
+                  { label: '500ms', value: 500 },
+                  { label: '700ms', value: 700 },
+                ].map((preset) => (
+                  <button
+                    key={preset.value}
+                    type="button"
+                    onClick={() => setHoldToReadyMs(preset.value)}
+                    className={`py-1 text-[11px] font-semibold rounded-lg border transition-all ${
+                      holdToReadyMs === preset.value
+                        ? 'bg-primary text-background border-primary'
+                        : 'bg-surface-elevated border-border text-text-muted hover:text-text'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+
+              <input
+                type="range"
+                min="0"
+                max="1000"
+                step="25"
+                value={holdToReadyMs}
+                onChange={(e) => setHoldToReadyMs(Number(e.target.value))}
+                className="w-full accent-primary cursor-pointer mt-1"
+              />
+              <p className="text-[11px] text-text-muted">
+                Thời gian bạn cần giữ phím để đồng hồ chuyển sang màu xanh (Ready) trước khi bắt đầu. (0ms = tức thì).
               </p>
             </div>
 
@@ -188,26 +287,6 @@ export const SettingsPage: React.FC = () => {
               </div>
               <p className="text-[11px] text-text-muted">
                 WCA official records display times in hundredths of a second.
-              </p>
-            </div>
-
-            {/* Hold to Ready Slider */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-text">Hold-to-Ready Delay</label>
-                <span className="font-mono text-xs font-bold text-primary">{holdToReadyMs} ms</span>
-              </div>
-              <input
-                type="range"
-                min="100"
-                max="800"
-                step="50"
-                value={holdToReadyMs}
-                onChange={(e) => setHoldToReadyMs(Number(e.target.value))}
-                className="w-full accent-primary cursor-pointer"
-              />
-              <p className="text-[11px] text-text-muted">
-                Required hold duration before the timer turns green and is ready to start.
               </p>
             </div>
 
